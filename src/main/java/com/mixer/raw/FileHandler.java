@@ -1,19 +1,79 @@
 package com.mixer.raw;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 
 public class FileHandler {
 
     private RandomAccessFile dbFile;
+    private final File fileDbFile;
 
     public FileHandler(final String dbFileName) throws FileNotFoundException {
         this.dbFile = new RandomAccessFile(dbFileName, "rw");
+        this.fileDbFile = new File(dbFileName);
     }
 
     public void close() throws IOException {
         this.dbFile.close();
+    }
+
+    public Person read(int rowNumber) throws IOException {
+        byte[] raw = readRawBytes(rowNumber);
+        Person person = new Person();
+        DataInputStream dataInputStream =
+                new DataInputStream(new ByteArrayInputStream(raw));
+        int len = dataInputStream.readInt();
+        byte[] b = new byte[len];
+        dataInputStream.read(b);
+        person.name = new String(b);
+
+        /*
+        int age,
+                       String address,
+                       String cardPlate,
+                       String description
+         */
+
+        int age = dataInputStream.readInt();
+        person.age = age;
+
+        //address
+        len = dataInputStream.readInt();
+        b = new byte[len];
+        dataInputStream.read(b);
+        person.address = new String(b);
+
+        //card plate
+        len = dataInputStream.readInt();
+        b = new byte[len];
+        dataInputStream.read(b);
+        person.cardPlate = new String(b);
+
+        //description
+        len = dataInputStream.readInt();
+        b = new byte[len];
+        dataInputStream.read(b);
+        person.description = new String(b);
+
+        return person;
+    }
+
+    private byte[] readRawBytes(int rowNumber) throws IOException {
+        //TODO - add position calculation for row number
+        long position = 0L;
+        this.dbFile.seek(position);
+        //read if record is deleted
+        Boolean isDeleted = this.dbFile.readBoolean();
+        if (isDeleted)
+            return new byte[0];
+
+        this.dbFile.seek(position + 1);
+        int recordLength = this.dbFile.readInt();
+        this.dbFile.seek(position + 1 + 4);
+        byte[] recordBytes = new byte[recordLength];
+        this.dbFile.read(recordBytes);
+
+        return recordBytes;
     }
 
     public boolean add(String name,
@@ -71,5 +131,9 @@ public class FileHandler {
         this.dbFile.write(description.getBytes());
 
         return true;
+    }
+
+    public void delete() {
+        this.fileDbFile.deleteOnExit();
     }
 }
