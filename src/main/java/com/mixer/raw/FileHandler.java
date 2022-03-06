@@ -8,9 +8,10 @@ public class FileHandler {
     private RandomAccessFile dbFile;
     private final File fileDbFile;
 
-    public FileHandler(final String dbFileName) throws FileNotFoundException {
+    public FileHandler(final String dbFileName) throws IOException {
         this.dbFile = new RandomAccessFile(dbFileName, "rw");
         this.fileDbFile = new File(dbFileName);
+        loadAllDataToIndex();
     }
 
     public void close() throws IOException {
@@ -59,14 +60,16 @@ public class FileHandler {
     }
 
     private byte[] readRawBytes(int rowNumber) throws IOException {
-        //TODO - add position calculation for row number
-        long position = 0L;
+        long position = Index.getInstance().getBytePosition(rowNumber);
+        if (position == -1) {
+            return null;
+        }
         this.dbFile.seek(position);
         //read if record is deleted
         Boolean isDeleted = this.dbFile.readBoolean();
-        if (isDeleted)
+        if (isDeleted) {
             return new byte[0];
-
+        }
         this.dbFile.seek(position + 1);
         int recordLength = this.dbFile.readInt();
         this.dbFile.seek(position + 1 + 4);
@@ -96,7 +99,8 @@ public class FileHandler {
         description: ?
          */
         //seek to last position
-        this.dbFile.seek(this.dbFile.length());
+        long currentPosition = this.dbFile.length();
+        this.dbFile.seek(currentPosition);
         //summed length of record without the first boolean
         int length =
                 4 + //record length
@@ -129,11 +133,36 @@ public class FileHandler {
         //description
         this.dbFile.writeInt(description.length());
         this.dbFile.write(description.getBytes());
-
+        //OK so update index
+        Index.getInstance().add(currentPosition);
         return true;
     }
 
     public void delete() {
         this.fileDbFile.deleteOnExit();
+    }
+
+    private void loadAllDataToIndex() throws IOException {
+        if (this.dbFile.length() == 0) {
+            return;
+        }
+        long currentPosition = 0;
+        long rowNumber = 0;
+
+        while (this.dbFile.length() > currentPosition) {
+//            System.out.println("Row: " + rowNumber + " byte pos:" + currentPosition);
+            System.out.println(Index.getInstance());
+            this.dbFile.seek(currentPosition);
+            boolean isDeleted = this.dbFile.readBoolean();
+            if (!isDeleted) {
+                Index.getInstance().add(currentPosition);
+                rowNumber++;
+            }
+            currentPosition += 1; //for boolean
+            this.dbFile.seek(currentPosition);
+            int dataLength = this.dbFile.readInt();
+            currentPosition += dataLength;
+        }
+        System.out.println("Total row number:" + rowNumber + ", Last byte position:" + currentPosition);
     }
 }
